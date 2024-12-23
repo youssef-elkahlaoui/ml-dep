@@ -227,7 +227,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <strong>${prediction.name}</strong>
                 </div>
                 <div class="text-end">
-                    <strong>Estimated Price: ${prediction.price}</strong>
+                    <strong>Estimated Price: ${parseInt(prediction.price.replace(/[^0-9]/g, '')).toLocaleString()}</strong><br>
+                    <small class="text-muted">Price Range: ${(Math.ceil((parseInt(prediction.price.replace(/[^0-9]/g, '')) * 0.9) / 100) * 100).toLocaleString()} - ${(Math.ceil((parseInt(prediction.price.replace(/[^0-9]/g, '')) * 1.15) / 100) * 100).toLocaleString()} MAD</small>
                 </div>
             `;
         } else {

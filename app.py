@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 # Load model and data
 def load_model():
-    with open("./models/regressor.pkl", "rb") as file:
+    with open("./models/regressorfinal.pkl", "rb") as file:
         return pickle.load(file)
 
 def load_data():
@@ -18,7 +18,7 @@ def load_data():
 data = load_model()
 df = load_data()
 model = data["model"]
-norm = data["normalization"]
+norm = data["norm"]
 
 # Get top 30 manufacturers by frequency
 top_manufacturers = df['manufacturer'].value_counts().nlargest(30).index.tolist()
@@ -40,7 +40,7 @@ df['engine_enc'] = le_engine.transform(df['engine'])
 df['transmission_enc'] = le_transmission.transform(df['transmission'])
 
 # Scale numerical features for recommendation system
-df['price'] = df['price'] * 10
+df['price'] = df['price'] * 12.7 # Convert to MAD
 scaler = StandardScaler()
 df[['kilometerage', 'price', 'age']] = scaler.fit_transform(df[['kilometerage', 'price', 'age']])
 
