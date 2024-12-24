@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import pickle
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.neighbors import NearestNeighbors
 
 app = Flask(__name__)
@@ -21,7 +21,7 @@ model = data["model"]
 norm = data["norm"]
 
 # Get top 30 manufacturers by frequency
-top_manufacturers = df['manufacturer'].value_counts().nlargest(30).index.tolist()
+top_manufacturers = df['manufacturer'].value_counts().nlargest(35).index.tolist()
 
 # Create and fit label encoders
 le_manufacturer = LabelEncoder()
@@ -40,8 +40,8 @@ df['engine_enc'] = le_engine.transform(df['engine'])
 df['transmission_enc'] = le_transmission.transform(df['transmission'])
 
 # Scale numerical features for recommendation system
-df['price'] = df['price'] * 12.7 # Convert to MAD
-scaler = StandardScaler()
+df['price'] = df['price'] * 12.8  # Convert to MAD
+scaler = MinMaxScaler()
 df[['kilometerage', 'price', 'age']] = scaler.fit_transform(df[['kilometerage', 'price', 'age']])
 
 # Features to use for similarity
@@ -85,17 +85,14 @@ def get_recommendations(input_data, df, features, scaler, le_encoders, top_n=6):
         input_features = input_df[features].values
 
         # Initialize and fit NearestNeighbors
-        nn = NearestNeighbors(n_neighbors=20, metric='cosine')
+        nn = NearestNeighbors(n_neighbors=top_n*3, metric='cosine')
         nn.fit(df[features])
 
         # Find nearest neighbors
         distances, indices = nn.kneighbors(input_features)
 
-        # Exclude the input car from recommendations if present
-        recommended_indices = indices[0][1:] if distances[0][0] == 0 else indices[0][:top_n]
-
         # Get recommended cars
-        recommended_cars = df.iloc[recommended_indices].copy()
+        recommended_cars = df.iloc[indices[0]].copy()
 
         # Inverse transform scaled numerical features
         recommended_cars[['kilometerage', 'price', 'age']] = scaler.inverse_transform(
@@ -117,7 +114,11 @@ def get_recommendations(input_data, df, features, scaler, le_encoders, top_n=6):
         # Ensure unique car names in recommendations
         recommended_cars = recommended_cars.drop_duplicates(subset=['name'])
 
-        return recommended_cars.head(top_n)
+        # Prioritize price and engine in recommendations
+        recommended_cars = recommended_cars.sort_values(by=['price', 'engine'])
+
+        final_recommendations = recommended_cars.head(top_n)
+        return final_recommendations
     except Exception as e:
         print(f"Recommendation error: {str(e)}")
         raise
