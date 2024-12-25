@@ -44,15 +44,6 @@ df['price'] = df['price'] * 12.8  # Convert to MAD
 scaler = MinMaxScaler()
 df[['kilometerage', 'price', 'age']] = scaler.fit_transform(df[['kilometerage', 'price', 'age']])
 
-features = [
-    'manufacturer_enc',
-    'engine_enc',
-    'age',
-    'transmission_enc',
-    'kilometerage',
-    'price'
-]
-
 @app.route('/')
 def home():
     return render_template(
@@ -65,7 +56,7 @@ def home():
 """
 Recommend similar cars based on input data.
 """
-def get_recommendations(input_data, df, features, scaler, le_encoders, top_n=6):
+def get_recommendations(input_data, df, scaler, le_encoders, top_n=6):
     try:
         # Create a DataFrame for the input data
         input_df = pd.DataFrame([input_data])
@@ -173,7 +164,6 @@ def predict():
         recommendations = get_recommendations(
             input_data=input_features,
             df=df,
-            features=features,
             scaler=scaler,
             le_encoders={
                 'manufacturer': le_manufacturer,
