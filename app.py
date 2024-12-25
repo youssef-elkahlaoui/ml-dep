@@ -21,7 +21,7 @@ model = data["model"]
 norm = data["norm"]
 
 # Get top 30 manufacturers by frequency
-top_manufacturers = df['manufacturer'].value_counts().nlargest(35).index.tolist()
+top_manufacturers = df['manufacturer'].value_counts().nlargest(30).index.tolist()
 
 # Create and fit label encoders
 le_manufacturer = LabelEncoder()
@@ -44,7 +44,6 @@ df['price'] = df['price'] * 12.8  # Convert to MAD
 scaler = MinMaxScaler()
 df[['kilometerage', 'price', 'age']] = scaler.fit_transform(df[['kilometerage', 'price', 'age']])
 
-# Features to use for similarity
 features = [
     'manufacturer_enc',
     'engine_enc',
@@ -71,53 +70,50 @@ def get_recommendations(input_data, df, features, scaler, le_encoders, top_n=6):
         # Create a DataFrame for the input data
         input_df = pd.DataFrame([input_data])
 
-        # Encode categorical variables
-        input_df['manufacturer_enc'] = le_encoders['manufacturer'].transform([input_data['manufacturer']])
+        # Encode categorical features
         input_df['engine_enc'] = le_encoders['engine'].transform([input_data['engine']])
         input_df['transmission_enc'] = le_encoders['transmission'].transform([input_data['transmission']])
+        input_df['manufacturer_enc'] = le_encoders['manufacturer'].transform([input_data['manufacturer']])
 
-        # Scale numerical features including age
+        # Scale numerical features
         input_df[['kilometerage', 'price', 'age']] = scaler.transform(
             input_df[['kilometerage', 'price', 'age']]
         )
 
-        # Prepare input features for NearestNeighbors
-        input_features = input_df[features].values
+        # Define features for each recommendation type
+        manufacturer_features = ['manufacturer_enc', 'age', 'price']
+        price_features = ['price', 'engine_enc', 'age']
 
-        # Initialize and fit NearestNeighbors
-        nn = NearestNeighbors(n_neighbors=top_n*3, metric='cosine')
-        nn.fit(df[features])
+        # Get manufacturer-based recommendations
+        nn_manufacturer = NearestNeighbors(n_neighbors=2, metric='euclidean')
+        nn_manufacturer.fit(df[manufacturer_features])
+        distances_mfr, indices_mfr = nn_manufacturer.kneighbors(input_df[manufacturer_features])
+        
+        # Get price-based recommendations
+        nn_price = NearestNeighbors(n_neighbors=top_n, metric='euclidean')
+        nn_price.fit(df[price_features])
+        distances_price, indices_price = nn_price.kneighbors(input_df[price_features])
 
-        # Find nearest neighbors
-        distances, indices = nn.kneighbors(input_features)
+        # Combine recommendations
+        manufacturer_recs = df.iloc[indices_mfr[0]].copy()
+        price_recs = df.iloc[indices_price[0]].copy()
 
-        # Get recommended cars
-        recommended_cars = df.iloc[indices[0]].copy()
+        # Inverse transform scaled features for both sets
+        for recs in [manufacturer_recs, price_recs]:
+            recs[['kilometerage', 'price', 'age']] = scaler.inverse_transform(
+                recs[['kilometerage', 'price', 'age']]
+            )
+            recs['engine'] = le_encoders['engine'].inverse_transform(recs['engine_enc'].astype(int))
+            recs['transmission'] = le_encoders['transmission'].inverse_transform(recs['transmission_enc'].astype(int))
+            recs['manufacturer'] = le_encoders['manufacturer'].inverse_transform(recs['manufacturer_enc'].astype(int))
 
-        # Inverse transform scaled numerical features
-        recommended_cars[['kilometerage', 'price', 'age']] = scaler.inverse_transform(
-            recommended_cars[['kilometerage', 'price', 'age']]
-        )
-        recommended_cars['price'] = recommended_cars['price']
+        # Remove duplicates and select top recommendations from each set
+        manufacturer_recs = manufacturer_recs.drop_duplicates(subset=['name']).head(2)
+        price_recs = price_recs.drop_duplicates(subset=['name']).head(6-len(manufacturer_recs))
 
-        # Inverse transform categorical variables
-        recommended_cars['manufacturer'] = le_encoders['manufacturer'].inverse_transform(
-            recommended_cars['manufacturer_enc'].astype(int)
-        )
-        recommended_cars['engine'] = le_encoders['engine'].inverse_transform(
-            recommended_cars['engine_enc'].astype(int)
-        )
-        recommended_cars['transmission'] = le_encoders['transmission'].inverse_transform(
-            recommended_cars['transmission_enc'].astype(int)
-        )
-
-        # Ensure unique car names in recommendations
-        recommended_cars = recommended_cars.drop_duplicates(subset=['name'])
-
-        # Prioritize price and engine in recommendations
-        recommended_cars = recommended_cars.sort_values(by=['price', 'engine'])
-
-        final_recommendations = recommended_cars.head(top_n)
+        # Combine both sets of recommendations
+        final_recommendations = pd.concat([manufacturer_recs, price_recs]).drop_duplicates(subset=['name'])
+        
         return final_recommendations
     except Exception as e:
         print(f"Recommendation error: {str(e)}")
